@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>XITOOF</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    h1 { font-size: 32px; margin-bottom: 10px; }
+    canvas { margin-top: 40px; max-width: 600px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <h1>XITOOF</h1>
+  <div id="tableau"></div>
+
+  <canvas id="graphBut" height="200"></canvas>
+  <canvas id="graphPasse" height="200"></canvas>
+  <canvas id="graphValeur" height="200"></canvas>
+
+  <script>
+    const statsCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQY1rcpOxg-oV8Qhc6qH9GUCuKCBJBhpgcnEh9y8C9Z2xaaIDbIqN85njIiRhZ6WA_suRVo4V8C7U-u/pub?gid=702636362&single=true&output=csv';
+    const valeurCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQY1rcpOxg-oV8Qhc6qH9GUCuKCBJBhpgcnEh9y8C9Z2xaaIDbIqN85njIiRhZ6WA_suRVo4V8C7U-u/pub?gid=114593817&single=true&output=csv';
+
+    async function chargerEtAfficher() {
+      const [resStats, resValeur] = await Promise.all([
+        fetch(statsCsvUrl).then(r => r.text()),
+        fetch(valeurCsvUrl).then(r => r.text())
+      ]);
+
+      // Traitement Statistiques
+      const statsData = Papa.parse(resStats, { header: true }).data.filter(row => row.année);
+      afficherTableau(statsData);
+      genererGraphique(statsData, 'but', 'graphBut', 'Buts par année');
+      genererGraphique(statsData, 'passe décisive', 'graphPasse', 'Passes décisives par année');
+
+      // Traitement Valeur Marchande
+      const valeurRaw = Papa.parse(resValeur).data;
+      const valeursParAnnee = valeurRaw
+        .filter(row => row.length >= 4 && row[2] && row[3])
+        .map(row => ({
+          annee: row[2],
+          valeur: parseFloat(row[3].replace(',', '.'))
+        }))
+        .filter(d => !isNaN(d.valeur));
+
+      const labels = valeursParAnnee.map(d => d.annee);
+      const data = valeursParAnnee.map(d => d.valeur);
+
+      new Chart(document.getElementById('graphValeur'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Valeur marchande (€M)',
+            data,
+            borderColor: 'orange',
+            fill: false
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    function afficherTableau(data) {
+      const container = document.getElementById('tableau');
+      let html = '<table><thead><tr>';
+      const colonnes = ['année', 'club', 'compétition', 'match', 'but', 'passe décisive', 'carton jaune', 'carton rouge'];
+      colonnes.forEach(col => html += `<th>${col}</th>`);
+      html += '</tr></thead><tbody>';
+      data.forEach(row => {
+        html += '<tr>';
+        colonnes.forEach(col => html += `<td>${row[col] || ''}</td>`);
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    function genererGraphique(data, champ, canvasId, titre) {
+      const agreg = {};
+      data.forEach(row => {
+        const annee = row['année'];
+        const valeur = parseInt(row[champ]) || 0;
+        if (!agreg[annee]) agreg[annee] = 0;
+        agreg[annee] += valeur;
+      });
+
+      const labels = Object.keys(agreg).sort();
+      const valeurs = labels.map(annee => agreg[annee]);
+
+      new Chart(document.getElementById(canvasId), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: titre,
+            data: valeurs,
+            backgroundColor: 'rgba(75, 192, 192, 0.6)'
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    chargerEtAfficher();
+  </script>
+
+</body>
+</html>
